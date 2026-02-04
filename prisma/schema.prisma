@@ -1,0 +1,264 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model attribute {
+  id   Int    @id @default(autoincrement())
+  name String
+}
+
+model cart {
+  id       Int @id @default(autoincrement())
+  userId   Int
+  paintId  Int
+  quantity Int @default(1)
+
+  @@index([paintId], map: "Cart_paintId_fkey")
+  @@index([userId], map: "Cart_userId_fkey")
+}
+
+model category {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique(map: "Category_name_key")
+  description String?
+}
+
+model chatmessage {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  message   String
+  response  String
+  createdAt DateTime @default(now())
+
+  @@index([userId], map: "ChatMessage_userId_fkey")
+}
+
+model designerprofile {
+  id          Int     @id @default(autoincrement())
+  userId      Int     @unique(map: "DesignerProfile_userId_key")
+  experience  Int?
+  specialties String?
+  rating      Float?
+  portfolio   String?
+}
+
+model favoritecolor {
+  id        Int     @id @default(autoincrement())
+  userId    Int
+  colorCode String
+  name      String?
+
+  @@index([userId], map: "FavoriteColor_userId_fkey")
+}
+
+model favoriteproduct {
+  userId  Int
+  paintId Int
+
+  @@id([userId, paintId])
+  @@index([paintId], map: "FavoriteProduct_paintId_fkey")
+}
+
+model offer {
+  id           Int                @id @default(autoincrement())
+  title        String
+  discount     Float
+  isActive     Boolean            @default(true)
+  startDate    DateTime
+  endDate      DateTime
+  discountType offer_discountType
+}
+
+model order {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  painterId   Int?
+  totalPrice  Float
+  status      String    @default("pending")
+  createdAt   DateTime  @default(now())
+  area        Float?
+  serviceDate DateTime?
+  serviceTime String?
+  zone        String?
+
+  @@index([painterId], map: "Order_painterId_fkey")
+  @@index([userId], map: "Order_userId_fkey")
+}
+
+model orderitem {
+  id       Int @id @default(autoincrement())
+  orderId  Int
+  paintId  Int
+  quantity Int @default(1)
+
+  @@index([orderId], map: "OrderItem_orderId_fkey")
+  @@index([paintId], map: "OrderItem_paintId_fkey")
+}
+
+model otp {
+  id        Int      @id @default(autoincrement())
+  phone     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+}
+
+model paint {
+  id            Int          @id @default(autoincrement())
+  name          String
+  price         Float
+  description   String?
+  categoryId    Int
+  subCategoryId Int?
+  vendorId      Int
+  base          paint_base
+  coatHours     Int
+  coverage      Float
+  createdAt     DateTime     @default(now())
+  dryDays       Int
+  finish        paint_finish
+  image         String?
+  isActive      Boolean      @default(true)
+  offerId       Int?
+  stock         Int
+  type          String
+  unit          paint_unit
+  updatedAt     DateTime
+  usage         paint_usage
+  inStock       Boolean      @default(true)
+
+  @@index([categoryId], map: "Paint_categoryId_fkey")
+  @@index([offerId], map: "Paint_offerId_fkey")
+  @@index([subCategoryId], map: "Paint_subCategoryId_fkey")
+  @@index([vendorId], map: "Paint_vendorId_fkey")
+}
+
+model paintattribute {
+  paintId     Int
+  attributeId Int
+
+  @@id([paintId, attributeId])
+  @@index([attributeId], map: "PaintAttribute_attributeId_fkey")
+}
+
+model painter {
+  id          Int     @id @default(autoincrement())
+  rating      Float   @default(0)
+  experience  Int
+  address     String?
+  city        String
+  serviceType String
+  userId      Int     @unique(map: "Painter_userId_key")
+}
+
+model paintergallery {
+  id        Int    @id @default(autoincrement())
+  painterId Int
+  imageUrl  String
+
+  @@index([painterId], map: "PainterGallery_painterId_fkey")
+}
+
+model painterreview {
+  id        Int      @id @default(autoincrement())
+  painterId Int
+  userId    Int
+  review    String
+  rating    Float
+  createdAt DateTime @default(now())
+
+  @@index([painterId], map: "PainterReview_painterId_fkey")
+  @@index([userId], map: "PainterReview_userId_fkey")
+}
+
+model selection {
+  id                  Int      @id @default(autoincrement())
+  userId              Int
+  paintId             Int
+  createdAt           DateTime @default(now())
+  area                Float
+  height              Float?
+  length              Float?
+  recommendedQuantity Int
+  width               Float?
+  colorCode           String?
+  imagePath           String?
+
+  @@index([paintId], map: "Selection_paintId_fkey")
+  @@index([userId], map: "Selection_userId_fkey")
+}
+
+model subcategory {
+  id         Int    @id @default(autoincrement())
+  name       String
+  categoryId Int
+
+  @@index([categoryId], map: "SubCategory_categoryId_fkey")
+}
+
+model user {
+  id        Int       @id @default(autoincrement())
+  name      String
+  email     String    @unique(map: "User_email_key")
+  password  String
+  phone     String    @unique(map: "User_phone_key")
+  role      user_role @default(user)
+  createdAt DateTime  @default(now())
+}
+
+model usercategory {
+  id         Int @id @default(autoincrement())
+  userId     Int
+  categoryId Int
+
+  @@unique([userId, categoryId], map: "UserCategory_userId_categoryId_key")
+  @@index([categoryId], map: "UserCategory_categoryId_fkey")
+}
+
+model vendor {
+  id       Int     @id @default(autoincrement())
+  userId   Int     @unique(map: "Vendor_userId_key")
+  shopName String
+  city     String
+  address  String?
+}
+
+enum user_role {
+  user
+  admin
+  painter
+  vendor
+}
+
+enum offer_discountType {
+  percentage
+  fixed
+}
+
+enum paint_base {
+  water
+  oil
+  wood
+}
+
+enum paint_finish {
+  matte
+  semi_gloss
+  gloss
+}
+
+enum paint_unit {
+  liter
+  kg
+}
+
+enum paint_usage {
+  indoor
+  outdoor
+  both
+}
