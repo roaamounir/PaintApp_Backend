@@ -156,6 +156,7 @@ model painter {
   userId      Int     @unique(map: "Painter_userId_key")
 }
 
+
 model paintergallery {
   id        Int    @id @default(autoincrement())
   painterId Int
@@ -262,3 +263,22 @@ enum paint_usage {
   outdoor
   both
 }
+
+
+// ===== Color System =====
+model ColorSystem {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique 
+  colors Color[]
+}
+
+// ===== Color =====
+model Color {
+  id            Int         @id @default(autoincrement())
+  code          String      
+  colorSystemId Int
+  colorSystem   ColorSystem @relation(fields: [colorSystemId], references: [id], onDelete: Cascade)
+  rgb           String?     
+  hex           String?     
+
+  }

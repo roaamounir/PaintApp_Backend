@@ -4,7 +4,7 @@ export function calculateRecommendedQuantity(selection, paint) {
   if (!area && selection.length && selection.width) {
     area = selection.length * selection.width;
     if (selection.height) {
-      area *= selection.height; // optional height
+      area *= selection.height; 
     }
   }
 

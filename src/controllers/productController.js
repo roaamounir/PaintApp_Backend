@@ -66,12 +66,10 @@ export const createPaint = async (req, res) => {
           base,
           stock: Number(stock),
           inStock: Number(stock) > 0,
-          category: { connect: { id: Number(categoryId) } },
-          vendor: { connect: { id: Number(vendorId) } },
-
-          ...(subCategoryId && {
-            subCategory: { connect: { id: Number(subCategoryId) } },
-          }),
+          categoryId: Number(categoryId),
+          vendorId: Number(vendorId),
+          updatedAt: new Date(),
+          ...(subCategoryId && { subCategoryId: Number(subCategoryId) }),
         },
       });
 
@@ -132,7 +130,14 @@ export const updatePaint = async (req, res, id) => {
 
       const paint = await prisma.paint.update({
         where: { id: Number(id) },
-        data: data,
+        data: {
+          ...data,
+          ...(data.categoryId && { categoryId: Number(data.categoryId) }),
+          ...(data.vendorId && { vendorId: Number(data.vendorId) }),
+          ...(data.subCategoryId && {
+            subCategoryId: Number(data.subCategoryId),
+          }),
+        },
       });
 
       res.writeHead(200, { "Content-Type": "application/json" });
