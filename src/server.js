@@ -12,6 +12,12 @@ import {
   exportPaintsToExcel,
   importPaintsFromExcel,
 } from "./controllers/productController.js";
+import {
+  getPaintersByCityAndService,
+  getPainterDetails,
+  createOrder,
+} from "./controllers/painterController.js";
+
 import { upload } from "./middlewares/upload.js";
 import { calculateRecommendedQuantity } from "./utils/calc.js";
 
@@ -134,13 +140,28 @@ const server = http.createServer(async (req, res) => {
         );
 
         res.writeHead(200, { "Content-Type": "application/json" });
-        return res.end(JSON.stringify({ recommendedQuantity })); // <--- return
+        return res.end(JSON.stringify({ recommendedQuantity }));
       } catch (err) {
         res.writeHead(500, { "Content-Type": "application/json" });
-        return res.end(JSON.stringify({ error: err.message })); // <--- return
+        return res.end(JSON.stringify({ error: err.message }));
       }
     });
     return;
+  }
+
+  // ===== Painter Routes =====
+
+  if (path === "/painters/filter" && method === "POST") {
+    return getPaintersByCityAndService(req, res);
+  }
+
+  if (path.startsWith("/painters/") && method === "GET") {
+    const painterId = path.split("/")[2];
+    return getPainterDetails(req, res, painterId);
+  }
+
+  if (path === "/orders" && method === "POST") {
+    return createOrder(req, res);
   }
 
   // ===== Default 404 =====
