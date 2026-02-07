@@ -1,3 +1,4 @@
+// src/controllers/productController.js
 import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
 import fs from "fs";
@@ -5,87 +6,74 @@ import fs from "fs";
 const prisma = new PrismaClient();
 
 // ===== Create Paint =====
-export const createPaint = async (req, res) => {
-  let body = "";
+export const createPaint = async (req, res, decodedUser, body) => {
+  try {
+    if (!body) return res.end(JSON.stringify({ error: "No data" }));
+    const data = JSON.parse(body);
 
-  req.on("data", (chunk) => (body += chunk));
+    const vendorRecord = await prisma.vendor.findUnique({
+      where: { userId: Number(decodedUser.id) },
+    });
 
-  req.on("end", async () => {
-    try {
-      const {
-        name,
-        type,
-        description,
-        price,
-        unit,
-        coverage,
-        coatHours,
-        dryDays,
-        finish,
-        usage,
-        base,
-        stock,
-        categoryId,
-        subCategoryId,
-        vendorId,
-      } = JSON.parse(body);
-
-      // ===== Validation =====
-      if (
-        !name ||
-        !type ||
-        !price ||
-        !unit ||
-        !coverage ||
-        !coatHours ||
-        !dryDays ||
-        !finish ||
-        !usage ||
-        !base ||
-        !stock ||
-        !categoryId ||
-        !vendorId
-      ) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        return res.end(JSON.stringify({ error: "Missing required fields" }));
-      }
-
-      // ===== Create Paint =====
-      const paint = await prisma.paint.create({
-        data: {
-          name,
-          type,
-          description: description || null,
-          price: Number(price),
-          unit,
-          coverage: Number(coverage),
-          coatHours: Number(coatHours),
-          dryDays: Number(dryDays),
-          finish,
-          usage,
-          base,
-          stock: Number(stock),
-          inStock: Number(stock) > 0,
-          categoryId: Number(categoryId),
-          vendorId: Number(vendorId),
-          updatedAt: new Date(),
-          ...(subCategoryId && { subCategoryId: Number(subCategoryId) }),
-        },
-      });
-
-      res.writeHead(201, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ message: "Paint created", paint }));
-    } catch (err) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: err.message }));
+    if (!vendorRecord) {
+      res.writeHead(403, { "Content-Type": "application/json" });
+      return res.end(
+        JSON.stringify({ error: "User is not a vendor in Vendor table" }),
+      );
     }
-  });
+
+    const paint = await prisma.paint.create({
+      data: {
+        name: data.name,
+        price: Number(data.price),
+        stock: Number(data.stock),
+        base: data.base,
+        finish: data.finish,
+        unit: data.unit,
+        usage: data.usage,
+        coverage: Number(data.coverage),
+        coatHours: Number(data.coatHours),
+        dryDays: Number(data.dryDays),
+        categoryId: Number(data.categoryId),
+        vendorId: vendorRecord.id,
+      },
+    });
+
+    res.writeHead(201, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ message: "Paint created!", paint }));
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: err.message }));
+  }
 };
 
 // ===== Get All Paints =====
 export const getAllPaints = async (req, res) => {
   try {
-    const paints = await prisma.paint.findMany();
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const search = url.searchParams.get("search");
+    const categoryId = url.searchParams.get("categoryId");
+    const base = url.searchParams.get("base");
+    const minPrice = url.searchParams.get("minPrice");
+    const maxPrice = url.searchParams.get("maxPrice");
+
+    const paints = await prisma.paint.findMany({
+      where: {
+        AND: [
+          search ? { name: { contains: search } } : {},
+          categoryId ? { categoryId: Number(categoryId) } : {},
+          base ? { base: base } : {},
+          {
+            price: {
+              gte: minPrice ? parseFloat(minPrice) : 0,
+              lte: maxPrice ? parseFloat(maxPrice) : 999999,
+            },
+          },
+        ],
+      },
+      include: { category: true, vendor: true },
+    });
+
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(paints));
   } catch (err) {
@@ -94,7 +82,7 @@ export const getAllPaints = async (req, res) => {
   }
 };
 
-// Read a Single Paint (GET /paint/:id)
+// ===== Get Paint by ID =====
 export const getPaintById = async (req, res, id) => {
   try {
     const paint = await prisma.paint.findUnique({
@@ -114,24 +102,25 @@ export const getPaintById = async (req, res, id) => {
   }
 };
 
-// Update Paint (PUT /paint/:id)
+// ===== Update Paint =====
 export const updatePaint = async (req, res, id) => {
   let body = "";
-
   req.on("data", (chunk) => (body += chunk));
-
   req.on("end", async () => {
     try {
       const data = JSON.parse(body);
 
-      if (data.stock !== undefined) {
-        data.inStock = Number(data.stock) > 0;
-      }
+      delete data.inStock;
 
       const paint = await prisma.paint.update({
         where: { id: Number(id) },
         data: {
           ...data,
+          ...(data.price && { price: Number(data.price) }),
+          ...(data.stock && { stock: Number(data.stock) }),
+          ...(data.coverage && { coverage: Number(data.coverage) }),
+          ...(data.coatHours && { coatHours: Number(data.coatHours) }),
+          ...(data.dryDays && { dryDays: Number(data.dryDays) }),
           ...(data.categoryId && { categoryId: Number(data.categoryId) }),
           ...(data.vendorId && { vendorId: Number(data.vendorId) }),
           ...(data.subCategoryId && {
@@ -149,13 +138,10 @@ export const updatePaint = async (req, res, id) => {
   });
 };
 
-// Delete Paint (DELETE /paint/:id)
+// ===== Delete Paint =====
 export const deletePaint = async (req, res, id) => {
   try {
-    await prisma.paint.delete({
-      where: { id: Number(id) },
-    });
-
+    await prisma.paint.delete({ where: { id: Number(id) } });
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ message: "Paint deleted" }));
   } catch (err) {
@@ -163,7 +149,9 @@ export const deletePaint = async (req, res, id) => {
     res.end(JSON.stringify({ error: err.message }));
   }
 };
-export async function exportPaintsToExcel(res) {
+
+// ===== Export Paints to Excel =====
+export const exportPaintsToExcel = async (res) => {
   try {
     const paints = await prisma.paint.findMany();
 
@@ -173,7 +161,7 @@ export async function exportPaintsToExcel(res) {
     worksheet.columns = [
       { header: "ID", key: "id", width: 10 },
       { header: "Name", key: "name", width: 20 },
-      { header: "Type", key: "type", width: 15 },
+      { header: "Base", key: "base", width: 15 },
       { header: "Price", key: "price", width: 10 },
       { header: "Stock", key: "stock", width: 10 },
       { header: "In Stock", key: "inStock", width: 10 },
@@ -183,12 +171,13 @@ export async function exportPaintsToExcel(res) {
       worksheet.addRow({
         id: paint.id,
         name: paint.name,
-        type: paint.type,
+        base: paint.base,
         price: paint.price,
         stock: paint.stock,
         inStock: paint.inStock ? "Yes" : "No",
       }),
     );
+
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -201,10 +190,10 @@ export async function exportPaintsToExcel(res) {
     res.statusCode = 500;
     res.end(JSON.stringify({ message: err.message }));
   }
-}
+};
 
-// ===== Import =====
-export async function importPaintsFromExcel(req, res) {
+// ===== Import Paints from Excel =====
+export const importPaintsFromExcel = async (req, res) => {
   try {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(req.file.path);
@@ -217,7 +206,7 @@ export async function importPaintsFromExcel(req, res) {
 
       paints.push({
         name: row.getCell(2).value,
-        type: row.getCell(3).value,
+        base: row.getCell(3).value,
         price: Number(row.getCell(4).value),
         stock: Number(row.getCell(5).value),
         inStock: Number(row.getCell(5).value) > 0,
@@ -225,7 +214,6 @@ export async function importPaintsFromExcel(req, res) {
     });
 
     await prisma.paint.createMany({ data: paints });
-
     fs.unlinkSync(req.file.path);
 
     res.end(
@@ -238,4 +226,4 @@ export async function importPaintsFromExcel(req, res) {
     res.statusCode = 500;
     res.end(JSON.stringify({ message: err.message }));
   }
-}
+};

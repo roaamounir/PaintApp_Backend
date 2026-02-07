@@ -7,278 +7,298 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model attribute {
-  id   Int    @id @default(autoincrement())
-  name String
-}
+// =======================
+//         ENUMS
+// =======================
 
-model cart {
-  id       Int @id @default(autoincrement())
-  userId   Int
-  paintId  Int
-  quantity Int @default(1)
-
-  @@index([paintId], map: "Cart_paintId_fkey")
-  @@index([userId], map: "Cart_userId_fkey")
-}
-
-model category {
-  id          Int     @id @default(autoincrement())
-  name        String  @unique(map: "Category_name_key")
-  description String?
-}
-
-model chatmessage {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  message   String
-  response  String
-  createdAt DateTime @default(now())
-
-  @@index([userId], map: "ChatMessage_userId_fkey")
-}
-
-model designerprofile {
-  id          Int     @id @default(autoincrement())
-  userId      Int     @unique(map: "DesignerProfile_userId_key")
-  experience  Int?
-  specialties String?
-  rating      Float?
-  portfolio   String?
-}
-
-model favoritecolor {
-  id        Int     @id @default(autoincrement())
-  userId    Int
-  colorCode String
-  name      String?
-
-  @@index([userId], map: "FavoriteColor_userId_fkey")
-}
-
-model favoriteproduct {
-  userId  Int
-  paintId Int
-
-  @@id([userId, paintId])
-  @@index([paintId], map: "FavoriteProduct_paintId_fkey")
-}
-
-model offer {
-  id           Int                @id @default(autoincrement())
-  title        String
-  discount     Float
-  isActive     Boolean            @default(true)
-  startDate    DateTime
-  endDate      DateTime
-  discountType offer_discountType
-}
-
-model order {
-  id          Int       @id @default(autoincrement())
-  userId      Int
-  painterId   Int?
-  totalPrice  Float
-  status      String    @default("pending")
-  createdAt   DateTime  @default(now())
-  area        Float?
-  serviceDate DateTime?
-  serviceTime String?
-  zone        String?
-
-  @@index([painterId], map: "Order_painterId_fkey")
-  @@index([userId], map: "Order_userId_fkey")
-}
-
-model orderitem {
-  id       Int @id @default(autoincrement())
-  orderId  Int
-  paintId  Int
-  quantity Int @default(1)
-
-  @@index([orderId], map: "OrderItem_orderId_fkey")
-  @@index([paintId], map: "OrderItem_paintId_fkey")
-}
-
-model otp {
-  id        Int      @id @default(autoincrement())
-  phone     String
-  code      String
-  expiresAt DateTime
-  used      Boolean  @default(false)
-}
-
-model paint {
-  id            Int          @id @default(autoincrement())
-  name          String
-  price         Float
-  description   String?
-  categoryId    Int
-  subCategoryId Int?
-  vendorId      Int
-  base          paint_base
-  coatHours     Int
-  coverage      Float
-  createdAt     DateTime     @default(now())
-  dryDays       Int
-  finish        paint_finish
-  image         String?
-  isActive      Boolean      @default(true)
-  offerId       Int?
-  stock         Int
-  type          String
-  unit          paint_unit
-  updatedAt     DateTime
-  usage         paint_usage
-  inStock       Boolean      @default(true)
-
-  @@index([categoryId], map: "Paint_categoryId_fkey")
-  @@index([offerId], map: "Paint_offerId_fkey")
-  @@index([subCategoryId], map: "Paint_subCategoryId_fkey")
-  @@index([vendorId], map: "Paint_vendorId_fkey")
-}
-
-model paintattribute {
-  paintId     Int
-  attributeId Int
-
-  @@id([paintId, attributeId])
-  @@index([attributeId], map: "PaintAttribute_attributeId_fkey")
-}
-
-model painter {
-  id          Int     @id @default(autoincrement())
-  rating      Float   @default(0)
-  experience  Int
-  address     String?
-  city        String
-  serviceType String
-  userId      Int     @unique(map: "Painter_userId_key")
-}
-
-
-model paintergallery {
-  id        Int    @id @default(autoincrement())
-  painterId Int
-  imageUrl  String
-
-  @@index([painterId], map: "PainterGallery_painterId_fkey")
-}
-
-model painterreview {
-  id        Int      @id @default(autoincrement())
-  painterId Int
-  userId    Int
-  review    String
-  rating    Float
-  createdAt DateTime @default(now())
-
-  @@index([painterId], map: "PainterReview_painterId_fkey")
-  @@index([userId], map: "PainterReview_userId_fkey")
-}
-
-model selection {
-  id                  Int      @id @default(autoincrement())
-  userId              Int
-  paintId             Int
-  createdAt           DateTime @default(now())
-  area                Float
-  height              Float?
-  length              Float?
-  recommendedQuantity Int
-  width               Float?
-  colorCode           String?
-  imagePath           String?
-
-  @@index([paintId], map: "Selection_paintId_fkey")
-  @@index([userId], map: "Selection_userId_fkey")
-}
-
-model subcategory {
-  id         Int    @id @default(autoincrement())
-  name       String
-  categoryId Int
-
-  @@index([categoryId], map: "SubCategory_categoryId_fkey")
-}
-
-model user {
-  id        Int       @id @default(autoincrement())
-  name      String
-  email     String    @unique(map: "User_email_key")
-  password  String
-  phone     String    @unique(map: "User_phone_key")
-  role      user_role @default(user)
-  createdAt DateTime  @default(now())
-}
-
-model usercategory {
-  id         Int @id @default(autoincrement())
-  userId     Int
-  categoryId Int
-
-  @@unique([userId, categoryId], map: "UserCategory_userId_categoryId_key")
-  @@index([categoryId], map: "UserCategory_categoryId_fkey")
-}
-
-model vendor {
-  id       Int     @id @default(autoincrement())
-  userId   Int     @unique(map: "Vendor_userId_key")
-  shopName String
-  city     String
-  address  String?
-}
-
-enum user_role {
+enum UserRole {
   user
   admin
   painter
   vendor
 }
 
-enum offer_discountType {
-  percentage
-  fixed
-}
-
-enum paint_base {
-  water
-  oil
-  wood
-}
-
-enum paint_finish {
-  matte
-  semi_gloss
-  gloss
-}
-
-enum paint_unit {
-  liter
-  kg
-}
-
-enum paint_usage {
+enum PainterService {
   indoor
   outdoor
   both
 }
 
+enum PaintBase {
+  water
+  oil
+  wood
+}
 
-// ===== Color System =====
+enum PaintFinish {
+  matte
+  semi_gloss
+  gloss
+}
+
+enum PaintUnit {
+  liter
+  kg
+}
+
+enum PaintUsage {
+  indoor
+  outdoor
+  both
+}
+
+enum OrderStatus {
+  pending
+  accepted
+  rejected
+  completed
+}
+
+enum OfferDiscountType {
+  percentage
+  fixed
+}
+
+// =======================
+//         Onboarding
+// =======================
+
+model Onboarding {
+  id          Int    @id @default(autoincrement())
+  title       String
+  description String
+  imageUrl    String
+  order       Int
+}
+
+// =======================
+//         USER
+// =======================
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  phone     String   @unique
+  role      UserRole @default(user)
+  createdAt DateTime @default(now())
+
+  painter      Painter?
+  vendor       Vendor?
+  cart         Cart?
+  favorites    FavoriteColor[]
+  orders       Order[]
+  painterVisit PainterVisit[]
+  reviews      PainterReview[]
+}
+
+// =======================
+//         VENDOR
+// =======================
+
+model Vendor {
+  id              Int     @id @default(autoincrement())
+  userId          Int     @unique
+  shopName        String
+  taxRegistration String
+  companyType     String
+  isApproved      Boolean @default(false)
+  city            String
+  address         String?
+
+  user   User    @relation(fields: [userId], references: [id])
+  paints Paint[]
+}
+
+// =======================
+//         PAINTER
+// =======================
+
+model Painter {
+  id         Int            @id @default(autoincrement())
+  userId     Int            @unique
+  rating     Float          @default(0)
+  experience Int
+  city       String
+  address    String?
+  service    PainterService
+
+  user    User             @relation(fields: [userId], references: [id])
+  gallery PainterGallery[]
+  reviews PainterReview[]
+  visits  PainterVisit[]
+}
+
+model PainterVisit {
+  id        Int         @id @default(autoincrement())
+  userId    Int
+  painterId Int
+  visitDate DateTime
+  area      Float
+  city      String
+  region    String
+  status    OrderStatus @default(pending)
+
+  user    User    @relation(fields: [userId], references: [id])
+  painter Painter @relation(fields: [painterId], references: [id])
+}
+
+// =======================
+//         CATEGORIES
+// =======================
+
+model Category {
+  id          Int           @id @default(autoincrement())
+  name        String        @unique
+  paints      Paint[]
+  SubCategory SubCategory[]
+}
+
+model SubCategory {
+  id         Int      @id @default(autoincrement())
+  name       String
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id])
+  paints     Paint[]
+}
+
+// =======================
+//         PAINT
+// =======================
+
+model Paint {
+  id            Int         @id @default(autoincrement())
+  name          String
+  description   String?
+  price         Float
+  stock         Int
+  image         String?
+  coverage      Float
+  coatHours     Int
+  dryDays       Int
+  base          PaintBase
+  finish        PaintFinish
+  unit          PaintUnit
+  usage         PaintUsage
+  vendorId      Int
+  categoryId    Int
+  subCategoryId Int?
+
+  vendor      Vendor       @relation(fields: [vendorId], references: [id])
+  category    Category     @relation(fields: [categoryId], references: [id])
+  subCategory SubCategory? @relation(fields: [subCategoryId], references: [id])
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+}
+
+// =======================
+//         CART
+// =======================
+
+model Cart {
+  id     Int        @id @default(autoincrement())
+  userId Int        @unique
+  user   User       @relation(fields: [userId], references: [id])
+  items  CartItem[]
+}
+
+model CartItem {
+  id       Int @id @default(autoincrement())
+  cartId   Int
+  paintId  Int
+  quantity Int @default(1)
+
+  cart  Cart  @relation(fields: [cartId], references: [id])
+  paint Paint @relation(fields: [paintId], references: [id])
+}
+
+// =======================
+//         ORDER
+// =======================
+
+model Order {
+  id         Int         @id @default(autoincrement())
+  userId     Int
+  painterId  Int?
+  totalPrice Float
+  status     OrderStatus @default(pending)
+  createdAt  DateTime    @default(now())
+  user       User        @relation(fields: [userId], references: [id])
+  items      OrderItem[]
+}
+
+model OrderItem {
+  id       Int @id @default(autoincrement())
+  orderId  Int
+  paintId  Int
+  quantity Int
+
+  order Order @relation(fields: [orderId], references: [id])
+  paint Paint @relation(fields: [paintId], references: [id])
+}
+
+// =======================
+//         FAVORITES
+// =======================
+
+model FavoriteColor {
+  id        Int    @id @default(autoincrement())
+  userId    Int
+  colorCode String
+  user      User   @relation(fields: [userId], references: [id])
+}
+
+// =======================
+//         PAINTER MEDIA
+// =======================
+
+model PainterGallery {
+  id        Int     @id @default(autoincrement())
+  painterId Int
+  imageUrl  String
+  painter   Painter @relation(fields: [painterId], references: [id])
+}
+
+model PainterReview {
+  id        Int      @id @default(autoincrement())
+  painterId Int
+  userId    Int
+  rating    Float
+  review    String
+  createdAt DateTime @default(now())
+
+  painter Painter @relation(fields: [painterId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+}
+
+// =======================
+//         OFFERS
+// =======================
+
+model Offer {
+  id           Int               @id @default(autoincrement())
+  title        String
+  discount     Float
+  discountType OfferDiscountType
+  isActive     Boolean           @default(true)
+}
+
+// =======================
+//         COLOR SYSTEM
+// =======================
+
 model ColorSystem {
   id     Int     @id @default(autoincrement())
-  name   String  @unique 
+  name   String  @unique
   colors Color[]
 }
 
-// ===== Color =====
 model Color {
   id            Int         @id @default(autoincrement())
-  code          String      
+  code          String
+  rgb           String?
+  hex           String?
   colorSystemId Int
-  colorSystem   ColorSystem @relation(fields: [colorSystemId], references: [id], onDelete: Cascade)
-  rgb           String?     
-  hex           String?     
-
-  }
+  colorSystem   ColorSystem @relation(fields: [colorSystemId], references: [id])
+}

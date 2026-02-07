@@ -1,3 +1,4 @@
+// src/routes/authRoutes.js
 import { signup, login } from "../controllers/authController.js";
 
 export const handleAuthRoutes = async (req, res) => {

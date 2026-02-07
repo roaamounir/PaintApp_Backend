@@ -1,3 +1,4 @@
+// src/utils/calc.js
 export function calculateRecommendedQuantity(selection, paint) {
   let area = selection.area;
 

@@ -1,34 +1,39 @@
-import { createPaint, getAllPaints } from "../controllers/productController.js";
-import { authorize } from "../utils/auth.js";
+import {
+  createPaint,
+  getAllPaints,
+  getPaintById,
+  updatePaint,
+  deletePaint,
+} from "../controllers/productController.js";
+import { authorize } from "../middlewares/auth.js";
 
-export const productRoutes = async (req, res) => {
+export const handleProductRoutes = async (req, res) => {
   const url = req.url;
   const method = req.method;
 
-  if (url === "/paint" && method === "POST") {
-    try {
-      authorize(req, ["admin", "vendor"]);
-      await createPaint(req, res);
-    } catch (err) {
-      res.writeHead(403, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: err.message }));
+  try {
+    if (url === "/paint" && method === "POST") {
+      const user = authorize(req, ["admin", "vendor"]);
+      return await createPaint(req, res, user);
     }
-  }
 
-  // Get All Paints
-  else if (url === "/paints" && method === "GET") {
-    await getAllPaints(req, res);
-  } else if (url.startsWith("/paint/") && method === "GET") {
-    const id = url.split("/")[2];
-    return await getPaintById(req, res, id);
-  } else {
+    if (url === "/paints" && method === "GET") {
+      return await getAllPaints(req, res);
+    }
+
+    if (url.startsWith("/paint/")) {
+      const id = url.split("/")[2].split("?")[0];
+      const user = authorize(req, ["admin", "vendor"]);
+
+      if (method === "GET") return await getPaintById(req, res, id);
+      if (method === "PUT") return await updatePaint(req, res, id);
+      if (method === "DELETE") return await deletePaint(req, res, id);
+    }
+
     res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Route not found" }));
-  }
-  
-  if (url.startsWith("/paint/") && method === "GET") {
-    const id = url.split("/")[2];
-    // authorize(req, ["admin", "vendor"]);
-    return await getPaintById(req, res, id);
+    res.end(JSON.stringify({ error: "Route not found in Products" }));
+  } catch (err) {
+    res.writeHead(403, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: err.message }));
   }
 };
