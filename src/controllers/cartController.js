@@ -1,11 +1,13 @@
 import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
-
+const getLang = (req) =>
+  req.headers["accept-language"] === "en" ? "en" : "ar";
 export const addToCart = async (req, res, decodedUser) => {
   let body = "";
   req.on("data", (chunk) => (body += chunk));
   req.on("end", async () => {
     try {
+      const lang = getLang(req);
       const { paintId, quantity } = JSON.parse(body);
 
       let userCart = await prisma.cart.findUnique({
@@ -52,6 +54,7 @@ export const addToCart = async (req, res, decodedUser) => {
 
 export const getMyCart = async (req, res, decodedUser) => {
   try {
+    const lang = getLang(req);
     const userCart = await prisma.cart.findUnique({
       where: { userId: Number(decodedUser.id) },
       include: {
@@ -65,7 +68,20 @@ export const getMyCart = async (req, res, decodedUser) => {
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ items: [], totalCartPrice: 0 }));
     }
-
+    const localizedItems = userCart.items.map((item) => ({
+      ...item,
+      paint: {
+        ...item.paint,
+        name:
+          lang === "en"
+            ? item.paint.name_en || item.paint.name
+            : item.paint.name_ar || item.paint.name,
+        description:
+          lang === "en"
+            ? item.paint.description_en || item.paint.description
+            : item.paint.description_ar || item.paint.description,
+      },
+    }));
     const totalCartPrice = userCart.items.reduce((sum, item) => {
       return sum + item.quantity * item.paint.price;
     }, 0);

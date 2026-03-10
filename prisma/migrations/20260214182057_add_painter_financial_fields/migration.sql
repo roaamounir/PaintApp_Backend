@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE `painter` ADD COLUMN `commissionRate` DOUBLE NOT NULL DEFAULT 10.0,
+    ADD COLUMN `debt` DOUBLE NOT NULL DEFAULT 0.0;

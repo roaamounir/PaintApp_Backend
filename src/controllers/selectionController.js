@@ -3,12 +3,15 @@ import { calculateRecommendedQuantity } from "../utils/calc.js";
 
 const prisma = new PrismaClient();
 
-// ===== Create Selection =====
+const getLang = (req) =>
+  req.headers["accept-language"] === "en" ? "en" : "ar";
+
 export const createSelection = async (req, res) => {
   let body = "";
   req.on("data", (chunk) => (body += chunk));
   req.on("end", async () => {
     try {
+      const lang = getLang(req);
       const {
         userId,
         paintId,
@@ -23,9 +26,14 @@ export const createSelection = async (req, res) => {
       const paint = await prisma.paint.findUnique({
         where: { id: Number(paintId) },
       });
+
       if (!paint) {
         res.writeHead(404, { "Content-Type": "application/json" });
-        return res.end(JSON.stringify({ error: "Paint not found" }));
+        return res.end(
+          JSON.stringify({
+            error: lang === "en" ? "Paint not found" : "المنتج غير موجود",
+          }),
+        );
       }
 
       const recommendedQuantity = calculateRecommendedQuantity(
@@ -37,10 +45,10 @@ export const createSelection = async (req, res) => {
         data: {
           userId,
           paintId,
-          area,
-          length,
-          width,
-          height,
+          area: parseFloat(area),
+          length: parseFloat(length),
+          width: parseFloat(width),
+          height: parseFloat(height),
           recommendedQuantity,
           colorCode,
           imagePath,
@@ -48,7 +56,15 @@ export const createSelection = async (req, res) => {
       });
 
       res.writeHead(201, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ message: "Selection created", selection }));
+      res.end(
+        JSON.stringify({
+          message:
+            lang === "en"
+              ? "Selection saved successfully"
+              : "تم حفظ اختياراتك بنجاح",
+          selection,
+        }),
+      );
     } catch (err) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: err.message }));
@@ -56,39 +72,55 @@ export const createSelection = async (req, res) => {
   });
 };
 
-// ===== Get All Selections =====
 export const getAllSelections = async (req, res) => {
   try {
+    const lang = getLang(req);
     const selections = await prisma.selection.findMany({
       include: { paint: true, user: true },
     });
+
+    const localizedSelections = selections.map((s) => ({
+      ...s,
+      paintName:
+        lang === "en"
+          ? s.paint.name_en || s.paint.name
+          : s.paint.name_ar || s.paint.name,
+    }));
+
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(selections));
+    res.end(JSON.stringify(localizedSelections));
   } catch (err) {
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: err.message }));
   }
 };
 
-// ===== Update Selection =====
 export const updateSelection = async (req, res, id) => {
   let body = "";
   req.on("data", (chunk) => (body += chunk));
   req.on("end", async () => {
     try {
+      const lang = getLang(req);
       const { area, length, width, height, colorCode, imagePath } =
         JSON.parse(body);
+
       const selectionDb = await prisma.selection.findUnique({
         where: { id: Number(id) },
       });
+
       if (!selectionDb) {
         res.writeHead(404, { "Content-Type": "application/json" });
-        return res.end(JSON.stringify({ error: "Selection not found" }));
+        return res.end(
+          JSON.stringify({
+            error: lang === "en" ? "Selection not found" : "الاختيار غير موجود",
+          }),
+        );
       }
 
       const paint = await prisma.paint.findUnique({
         where: { id: selectionDb.paintId },
       });
+
       const recommendedQuantity = calculateRecommendedQuantity(
         { area, length, width, height },
         paint,
@@ -97,10 +129,10 @@ export const updateSelection = async (req, res, id) => {
       const updatedSelection = await prisma.selection.update({
         where: { id: Number(id) },
         data: {
-          area,
-          length,
-          width,
-          height,
+          area: parseFloat(area),
+          length: parseFloat(length),
+          width: parseFloat(width),
+          height: parseFloat(height),
           recommendedQuantity,
           colorCode,
           imagePath,
@@ -109,7 +141,10 @@ export const updateSelection = async (req, res, id) => {
 
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
-        JSON.stringify({ message: "Selection updated", updatedSelection }),
+        JSON.stringify({
+          message: lang === "en" ? "Updated successfully" : "تم التحديث بنجاح",
+          updatedSelection,
+        }),
       );
     } catch (err) {
       res.writeHead(500, { "Content-Type": "application/json" });
@@ -117,13 +152,33 @@ export const updateSelection = async (req, res, id) => {
     }
   });
 };
-
-// ===== Delete Selection =====
 export const deleteSelection = async (req, res, id) => {
   try {
-    await prisma.selection.delete({ where: { id: Number(id) } });
+    const lang = getLang(req);
+
+    const selection = await prisma.selection.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!selection) {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      return res.end(
+        JSON.stringify({
+          error: lang === "en" ? "Selection not found" : "الاختيار غير موجود",
+        }),
+      );
+    }
+
+    await prisma.selection.delete({
+      where: { id: Number(id) },
+    });
+
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ message: "Selection deleted" }));
+    res.end(
+      JSON.stringify({
+        message: lang === "en" ? "Deleted successfully" : "تم الحذف بنجاح",
+      }),
+    );
   } catch (err) {
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: err.message }));

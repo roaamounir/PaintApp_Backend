@@ -1,0 +1,7 @@
+-- AlterTable
+ALTER TABLE `order` ADD COLUMN `vendorCommission` DOUBLE NOT NULL DEFAULT 0.0,
+    ADD COLUMN `vendorNetProfit` DOUBLE NOT NULL DEFAULT 0.0;
+
+-- AlterTable
+ALTER TABLE `user` ADD COLUMN `commissionRate` DOUBLE NOT NULL DEFAULT 10.0,
+    ADD COLUMN `totalRevenue` DOUBLE NOT NULL DEFAULT 0.0;

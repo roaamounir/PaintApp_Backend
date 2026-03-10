@@ -58,17 +58,39 @@ enum OfferDiscountType {
   percentage
   fixed
 }
-
+enum OrderSource {
+  app
+  pos      
+  phone
+}
+enum OrderType {
+  retail
+  wholesale
+  project
+}
+enum CustomerType {
+  cash
+  credit
+  vip
+}
+enum MediaType {
+  image
+  video
+}
 // =======================
 //         Onboarding
 // =======================
 
 model Onboarding {
-  id          Int    @id @default(autoincrement())
-  title       String
+  id             Int    @id @default(autoincrement())
+  title_ar       String? 
+  title_en       String? 
+  description_ar String? 
+  description_en String? 
+  imageUrl       String
+  order          Int
+  title       String 
   description String
-  imageUrl    String
-  order       Int
 }
 
 // =======================
@@ -82,15 +104,24 @@ model User {
   password  String
   phone     String   @unique
   role      UserRole @default(user)
+  status    Boolean  @default(true)
   createdAt DateTime @default(now())
-
-  painter      Painter?
-  vendor       Vendor?
-  cart         Cart?
-  favorites    FavoriteColor[]
-  orders       Order[]
-  painterVisit PainterVisit[]
-  reviews      PainterReview[]
+  customerType CustomerType @default(cash)
+  painter            Painter?
+  vendor             Vendor?
+  cart               Cart?
+  favorites          FavoriteColor[]
+  orders             Order[]
+  painterVisit       PainterVisit[]
+  simulations     ColorSimulation[]
+  reviews            PainterReview[]
+  balance            Float               @default(0.0)
+  creditLimit        Float               @default(0.0)
+  permissions        Json?
+  auditLogs          AuditLog[]
+  walletTransactions WalletTransaction[]
+  totalRevenue   Float   @default(0.0)
+  invoices   Invoice[] @relation("CustomerInvoices")  
 }
 
 // =======================
@@ -98,17 +129,40 @@ model User {
 // =======================
 
 model Vendor {
-  id              Int     @id @default(autoincrement())
-  userId          Int     @unique
-  shopName        String
+  id              Int      @id @default(autoincrement())
+  userId          Int      @unique
+  
+  shopName_ar     String?
+  shopName_en     String?
+  shopName        String  
+
   taxRegistration String
+  
+  companyType_ar  String?
+  companyType_en  String?
   companyType     String
+
   isApproved      Boolean @default(false)
+
+  region_ar       String?
+  region_en       String?
+  region          String?
+
+  city_ar         String?
+  city_en         String?
   city            String
+
+  address_ar      String?
+  address_en      String?
   address         String?
 
-  user   User    @relation(fields: [userId], references: [id])
-  paints Paint[]
+  paymentStatus   Boolean @default(false)
+  paymentMethod   String?
+  createdAt       DateTime @default(now())
+  commissionRate  Float   @default(10.0)
+
+  user            User    @relation(fields: [userId], references: [id])
+  paints          Paint[]
 }
 
 // =======================
@@ -116,18 +170,49 @@ model Vendor {
 // =======================
 
 model Painter {
-  id         Int            @id @default(autoincrement())
-  userId     Int            @unique
-  rating     Float          @default(0)
-  experience Int
-  city       String
-  address    String?
-  service    PainterService
+  id                 Int              @id @default(autoincrement())
+  userId             Int              @unique
+  rating             Float            @default(0)
+  experience         Int
+  
+  city_ar            String?
+  city_en            String?
+  city               String          
+  
+  address_ar         String?
+  address_en         String?
+  address            String?         
 
-  user    User             @relation(fields: [userId], references: [id])
-  gallery PainterGallery[]
-  reviews PainterReview[]
-  visits  PainterVisit[]
+  service            PainterService   
+
+  bio_ar             String?          @db.Text
+  bio_en             String?          @db.Text
+  bio                String?          @db.Text 
+  
+  adminNotes         String?          @db.Text 
+
+  verificationStatus String           @default("pending")
+  lastActive         DateTime         @default(now())
+  user               User             @relation(fields: [userId], references: [id])
+  gallery            PainterGallery[]
+  reviews            PainterReview[]
+  visits             PainterVisit[]
+  documents          PainterDocument[] 
+  commissionRate     Float            @default(10.0) 
+  debt               Float            @default(0.0)
+}
+
+model PainterDocument {
+  id        Int      @id @default(autoincrement())
+  painterId Int
+  
+  type_ar   String?  
+  type_en   String?  
+  type      String   
+
+  fileUrl   String
+  status    String   @default("pending")
+  painter   Painter  @relation(fields: [painterId], references: [id])
 }
 
 model PainterVisit {
@@ -136,60 +221,80 @@ model PainterVisit {
   painterId Int
   visitDate DateTime
   area      Float
+  
+  city_ar   String?
+  city_en   String?
   city      String
+  
+  region_ar String?
+  region_en String?
   region    String
-  status    OrderStatus @default(pending)
 
-  user    User    @relation(fields: [userId], references: [id])
-  painter Painter @relation(fields: [painterId], references: [id])
+  status    OrderStatus @default(pending) // Enum
+  user      User        @relation(fields: [userId], references: [id])
+  painter   Painter     @relation(fields: [painterId], references: [id])
 }
-
 // =======================
 //         CATEGORIES
 // =======================
 
 model Category {
-  id          Int           @id @default(autoincrement())
-  name        String        @unique
+  id      Int           @id @default(autoincrement())
+  name_ar String?       @unique
+  name_en String?       @unique
+  name    String        @unique 
   paints      Paint[]
   SubCategory SubCategory[]
 }
 
 model SubCategory {
-  id         Int      @id @default(autoincrement())
-  name       String
-  categoryId Int
-  category   Category @relation(fields: [categoryId], references: [id])
-  paints     Paint[]
+  id          Int      @id @default(autoincrement())
+  
+  name_ar     String?
+  name_en     String?
+  name        String
+  categoryId  Int
+  category    Category @relation(fields: [categoryId], references: [id])
+  paints      Paint[]
 }
 
 // =======================
 //         PAINT
 // =======================
-
 model Paint {
-  id            Int         @id @default(autoincrement())
-  name          String
-  description   String?
-  price         Float
-  stock         Int
-  image         String?
-  coverage      Float
-  coatHours     Int
-  dryDays       Int
-  base          PaintBase
-  finish        PaintFinish
-  unit          PaintUnit
-  usage         PaintUsage
-  vendorId      Int
-  categoryId    Int
-  subCategoryId Int?
+  id             Int          @id @default(autoincrement())
+  name_ar        String?
+  name_en        String?
+  name           String       
 
-  vendor      Vendor       @relation(fields: [vendorId], references: [id])
-  category    Category     @relation(fields: [categoryId], references: [id])
-  subCategory SubCategory? @relation(fields: [subCategoryId], references: [id])
-  cartItems   CartItem[]
-  orderItems  OrderItem[]
+  description_ar String?      @db.Text
+  description_en String?      @db.Text
+  description    String?      @db.Text
+  price          Float
+  stock          Int
+  image          String?
+  coverage       Float
+  coatHours      Int
+  dryDays        Int
+  base           PaintBase
+  finish         PaintFinish
+  unit           PaintUnit
+  usage          PaintUsage
+  vendorId       Int
+  categoryId     Int
+  subCategoryId  Int?
+  colorId        Int?     
+  color          Color?    @relation(fields: [colorId], references: [id])
+  minStockLevel  Int          @default(5)
+  availability   String       @default("in_stock")
+  barcode        String?      @unique
+  status         String       @default("available")
+  vendor         Vendor       @relation(fields: [vendorId], references: [id])
+  category       Category     @relation(fields: [categoryId], references: [id])
+  subCategory    SubCategory? @relation(fields: [subCategoryId], references: [id])
+  cartItems      CartItem[]
+  orderItems     OrderItem[]
+  version        Int          @default(0)
 }
 
 // =======================
@@ -218,26 +323,35 @@ model CartItem {
 // =======================
 
 model Order {
-  id         Int         @id @default(autoincrement())
-  userId     Int
-  painterId  Int?
-  totalPrice Float
-  status     OrderStatus @default(pending)
-  createdAt  DateTime    @default(now())
-  user       User        @relation(fields: [userId], references: [id])
-  items      OrderItem[]
+  id            Int         @id @default(autoincrement())
+  userId        Int
+  painterId     Int?
+  totalPrice    Float
+  status        OrderStatus @default(pending)
+  createdAt     DateTime    @default(now())
+  user          User        @relation(fields: [userId], references: [id])
+  items         OrderItem[]
+  
+  orderNumber   String      @unique
+  source        OrderSource @default(app) 
+  invoice            Invoice?             
+  walletTransactions WalletTransaction[]  
+  paymentType String?  @default("cash")
+  isPaid      Boolean  @default(false)
 }
+// =======================
+//        ORDER ITEM
+// =======================
 
 model OrderItem {
-  id       Int @id @default(autoincrement())
-  orderId  Int
-  paintId  Int
-  quantity Int
-
-  order Order @relation(fields: [orderId], references: [id])
-  paint Paint @relation(fields: [paintId], references: [id])
+  id        Int   @id @default(autoincrement())
+  orderId   Int
+  paintId   Int
+  quantity  Int
+  price     Float 
+  order     Order @relation(fields: [orderId], references: [id])
+  paint     Paint @relation(fields: [paintId], references: [id])
 }
-
 // =======================
 //         FAVORITES
 // =======================
@@ -252,12 +366,24 @@ model FavoriteColor {
 // =======================
 //         PAINTER MEDIA
 // =======================
-
 model PainterGallery {
-  id        Int     @id @default(autoincrement())
-  painterId Int
-  imageUrl  String
-  painter   Painter @relation(fields: [painterId], references: [id])
+  id          Int       @id @default(autoincrement())
+  painterId   Int
+  
+  mediaType   MediaType @default(image)
+  url         String   
+  thumbnail   String?  
+  
+  title_ar    String?
+  title_en    String?
+  
+  displayOrder Int     @default(0)
+  
+  createdAt   DateTime  @default(now())
+  
+  painter     Painter   @relation(fields: [painterId], references: [id])
+
+  @@index([painterId])
 }
 
 model PainterReview {
@@ -270,6 +396,8 @@ model PainterReview {
 
   painter Painter @relation(fields: [painterId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
+  isReported Boolean @default(false)
+  images     Json?
 }
 
 // =======================
@@ -278,7 +406,9 @@ model PainterReview {
 
 model Offer {
   id           Int               @id @default(autoincrement())
-  title        String
+  title_ar     String?
+  title_en     String?
+  title        String         
   discount     Float
   discountType OfferDiscountType
   isActive     Boolean           @default(true)
@@ -287,18 +417,112 @@ model Offer {
 // =======================
 //         COLOR SYSTEM
 // =======================
-
 model ColorSystem {
-  id     Int     @id @default(autoincrement())
-  name   String  @unique
-  colors Color[]
+  id      Int     @id @default(autoincrement())
+  name_ar String? @unique
+  name_en String? @unique
+  name    String  @unique
+
+  colors  Color[]
 }
 
 model Color {
   id            Int         @id @default(autoincrement())
-  code          String
+  code          String      @unique
   rgb           String?
   hex           String?
+  lab_l         Float?
+  lab_a         Float?
+  lab_b         Float?
+  brand         String?
   colorSystemId Int
+  paints        Paint[]
+  simulations   ColorSimulation[] 
   colorSystem   ColorSystem @relation(fields: [colorSystemId], references: [id])
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  action    String
+  details   String   @db.Text
+  ipAddress String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+
+model WalletTransaction {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  amount    Float
+  type      String   
+
+  description_ar String?
+  description_en String?
+
+  orderId   Int?
+  createdAt DateTime @default(now())
+  order     Order?   @relation(fields: [orderId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+// =======================
+//        INVOICE
+// =======================
+
+model Invoice {
+  id            Int      @id @default(autoincrement())
+  invoiceNumber String   @unique // INV-2024-001
+  orderId       Int      @unique
+  order         Order    @relation(fields: [orderId], references: [id])
+  
+  customerId    Int
+  customer      User     @relation("CustomerInvoices", fields: [customerId], references: [id])
+  
+  amount        Float
+  dueDate       DateTime?
+  status        String   @default("unpaid") // paid, unpaid, partial
+  createdAt     DateTime @default(now())
+}
+
+// =======================
+//     COLOR SIMULATION
+// =======================
+
+model ColorSimulation {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  colorId          Int?     
+  originalImage   String  
+  resultImage     String?  
+  
+  appliedSelections Json?    
+
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id])
+  color            Color?    @relation(fields: [colorId], references: [id]) 
+  @@index([userId])
+  @@index([colorId])
+}
+
+// =======================
+//   SETTINGS & CONFIG
+// =======================
+
+model AppSetting {
+  id    Int     @id @default(autoincrement())
+  key   String  @unique 
+  value String  @db.Text
+}
+
+model HomeBanner {
+  id           Int      @id @default(autoincrement())
+  imageUrl     String
+  title_ar     String?
+  title_en     String?
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
 }

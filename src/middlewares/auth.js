@@ -24,3 +24,23 @@ export const authorize = (req, roles) => {
     throw new Error("Access denied");
   return user;
 };
+
+export const checkPermission = async (req, prisma, requiredPermission) => {
+  const decoded = authenticate(req);
+
+  const user = await prisma.user.findUnique({
+    where: { id: decoded.id },
+  });
+
+  if (!user) throw new Error("User not found");
+
+  if (user.role === "admin") return user;
+
+  const userPermissions = user.permissions || {};
+
+  if (userPermissions[requiredPermission] === true) {
+    return user;
+  }
+
+  throw new Error("عذراً، لا تملك الصلاحية الكافية");
+};
