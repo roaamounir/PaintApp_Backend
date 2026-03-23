@@ -7,6 +7,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model auditlog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  action    String
+  details   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([userId], map: "AuditLog_userId_fkey")
+  @@index([action], map: "AuditLog_action_idx")
+  @@index([createdAt], map: "AuditLog_createdAt_idx")
+}
+
 model attribute {
   id   Int    @id @default(autoincrement())
   name String
@@ -45,6 +57,56 @@ model designerprofile {
   specialties String?
   rating      Float?
   portfolio   String?
+}
+
+model design {
+  id         Int       @id @default(autoincrement())
+  designerId Int
+  title      String
+  description String  @db.Text
+  imageUrl   String
+  videoUrl   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([designerId], map: "Design_designerId_fkey")
+  @@map("design")
+}
+
+model designcomment {
+  id        Int      @id @default(autoincrement())
+  designId  Int
+  userId    Int
+  text      String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([designId], map: "DesignComment_designId_fkey")
+  @@index([userId], map: "DesignComment_userId_fkey")
+  @@map("design_comment")
+}
+
+model designfavorite {
+  userId   Int
+  designId Int
+
+  @@id([userId, designId])
+  @@index([designId], map: "DesignFavorite_designId_fkey")
+  @@map("design_favorite")
+}
+
+model designrequest {
+  id          Int      @id @default(autoincrement())
+  designId    Int
+  clientUserId Int
+  description String  @db.Text
+  imageUrl    String?
+  videoUrl    String?
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+
+  @@index([designId], map: "DesignRequest_designId_fkey")
+  @@index([clientUserId], map: "DesignRequest_clientUserId_fkey")
+  @@map("design_request")
 }
 
 model favoritecolor {
@@ -90,6 +152,23 @@ model order {
   @@index([userId], map: "Order_userId_fkey")
 }
 
+model visitrequest {
+  id            Int      @id @default(autoincrement())
+  clientUserId  Int
+  painterId     Int
+  scheduledDate DateTime // التاريخ
+  scheduledTime String   // الوقت
+  area          Float?   // المساحة (متر مربع)
+  address       String   @db.Text // العنوان
+  status        String   @default("pending") // pending, accepted, rejected, completed
+  createdAt     DateTime @default(now())
+  notes         String?  @db.Text
+
+  @@index([clientUserId], map: "VisitRequest_clientUserId_fkey")
+  @@index([painterId], map: "VisitRequest_painterId_fkey")
+  @@map("visit_request")
+}
+
 model orderitem {
   id       Int @id @default(autoincrement())
   orderId  Int
@@ -108,34 +187,39 @@ model otp {
   used      Boolean  @default(false)
 }
 
-model paint {
-  id            Int          @id @default(autoincrement())
-  name          String
-  price         Float
-  description   String?
-  categoryId    Int
-  subCategoryId Int?
-  vendorId      Int
-  base          paint_base
-  coatHours     Int
-  coverage      Float
-  createdAt     DateTime     @default(now())
-  dryDays       Int
-  finish        paint_finish
-  image         String?
-  isActive      Boolean      @default(true)
-  offerId       Int?
-  stock         Int
-  type          String
-  unit          paint_unit
-  updatedAt     DateTime
-  usage         paint_usage
-  inStock       Boolean      @default(true)
+model Paint {
+  id          Int          @id @default(autoincrement())
+  name        String
+  price       Float
+  description String?
 
-  @@index([categoryId], map: "Paint_categoryId_fkey")
-  @@index([offerId], map: "Paint_offerId_fkey")
-  @@index([subCategoryId], map: "Paint_subCategoryId_fkey")
-  @@index([vendorId], map: "Paint_vendorId_fkey")
+  categoryId  Int
+  vendorId    Int
+
+  base        paint_base
+  coatHours   Int
+  coverage    Float
+  dryDays     Int
+  finish      paint_finish
+  unit        paint_unit
+  usage       paint_usage
+
+  image       String?
+  stock       Int
+  inStock     Boolean      @default(true)
+  isActive    Boolean      @default(true)
+  weightKg    Float?       @default(1)
+
+  offerId     Int?
+  type        String
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("paint")
+  @@index([categoryId])
+  @@index([vendorId])
+  @@index([offerId])
 }
 
 model paintattribute {
@@ -221,11 +305,38 @@ model usercategory {
 }
 
 model vendor {
-  id       Int     @id @default(autoincrement())
-  userId   Int     @unique(map: "Vendor_userId_key")
-  shopName String
-  city     String
-  address  String?
+  id               Int      @id @default(autoincrement())
+  userId           Int      @unique(map: "Vendor_userId_key")
+  shopName         String
+  city             String
+  address          String?
+  region           String?
+  taxRegistration  String?
+  isApproved       Boolean  @default(true)
+  paymentStatus    Boolean  @default(false)
+}
+
+model ColorSystem {
+  id    Int    @id @default(autoincrement())
+  name  String
+  slug  String? @unique
+  colors SystemColor[]
+
+  @@map("color_system")
+}
+
+model SystemColor {
+  id            Int         @id @default(autoincrement())
+  colorSystemId Int
+  code          String
+  hex           String
+  labL          Float?
+  labA          Float?
+  labB          Float?
+  colorSystem   ColorSystem @relation(fields: [colorSystemId], references: [id], onDelete: Cascade)
+
+  @@index([colorSystemId])
+  @@map("system_color")
 }
 
 enum user_role {
@@ -233,6 +344,7 @@ enum user_role {
   admin
   painter
   vendor
+  designer
 }
 
 enum offer_discountType {

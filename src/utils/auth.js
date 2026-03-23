@@ -16,9 +16,6 @@ export const authenticate = (req) => {
 
 export const authorize = (req, roles) => {
   const user = authenticate(req);
-  console.log("Decoded user:", user);
-  console.log("Allowed roles:", roles);
-  console.log("user.role typeof:", typeof user.role);
   if (!roles.map(String).includes(String(user.role)))
     throw new Error("Access denied");
   return user;
