@@ -1,5 +1,97 @@
 import prisma from "../prismaClient.js";
-import { authenticate, authorize } from "../utils/auth.js";
+import { authenticate } from "../utils/auth.js";
+import crypto from "crypto";
+
+/**
+ * @swagger
+ * tags:
+ *   - name: VisitRequests
+ *     description: طلبات زيارة الفني (موعد، عنوان، منطقة)
+ * /visit-requests:
+ *   get:
+ *     tags: [VisitRequests]
+ *     summary: قائمة طلبات الزيارة (الفني يرى طلباته عبر forPainter=true)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: mine
+ *         schema: { type: string, enum: ['1', 'true'] }
+ *       - in: query
+ *         name: forPainter
+ *         schema: { type: string, enum: ['1', 'true'] }
+ *         description: عند إرسالها يستطيع الفني جلب جميع الطلبات الموجهة له
+ *     responses:
+ *       200:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/VisitRequest'
+ *   post:
+ *     tags: [VisitRequests]
+ *     summary: إنشاء طلب زيارة
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/VisitRequestCreateBody'
+ *     responses:
+ *       201:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/VisitRequest'
+ * /visit-requests/{id}:
+ *   get:
+ *     tags: [VisitRequests]
+ *     summary: طلب زيارة بالمعرف
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/VisitRequest'
+ * /visit-requests/{id}/status:
+ *   put:
+ *     tags: [VisitRequests]
+ *     summary: تحديث حالة الطلب (الفني أو الأدمن)
+ *     description: الفني يستطيع تحديث حالة طلباته فقط إلى pending/accepted/rejected/completed
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, accepted, rejected, completed]
+ *     responses:
+ *       200:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/VisitRequest'
+ */
 
 const json = (res, code, data) => {
   res.writeHead(code, { "Content-Type": "application/json" });
@@ -14,8 +106,8 @@ const readBody = (req) =>
   });
 
 const safeId = (id) => {
-  const n = parseInt(id, 10);
-  return Number.isFinite(n) ? n : null;
+  const s = id != null ? String(id).trim() : "";
+  return s.length > 0 ? s : null;
 };
 
 const rowToVisitRequest = (row) => ({
@@ -25,11 +117,31 @@ const rowToVisitRequest = (row) => ({
   scheduledDate: row.scheduledDate instanceof Date ? row.scheduledDate.toISOString().slice(0, 10) : row.scheduledDate,
   scheduledTime: row.scheduledTime,
   area: row.area != null ? Number(row.area) : null,
+  region: row.region ?? null,
   address: row.address,
   status: row.status,
   createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
   notes: row.notes ?? null,
+  clientPhone: row.clientPhone ?? null,
+  clientName: row.clientName ?? null,
 });
+
+const attachClientContact = async (rows) => {
+  const list = Array.isArray(rows) ? rows : [];
+  if (list.length === 0) return [];
+  const userIds = [...new Set(list.map((r) => r.clientUserId).filter(Boolean))];
+  if (userIds.length === 0) return list;
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, phone: true, name: true },
+  });
+  const userMap = Object.fromEntries(users.map((u) => [u.id, u]));
+  return list.map((r) => ({
+    ...r,
+    clientPhone: userMap[r.clientUserId]?.phone || null,
+    clientName: userMap[r.clientUserId]?.name || null,
+  }));
+};
 
 // POST /visit-requests — العميل يطلب زيارة من الفني (التاريخ، الوقت، المساحة، العنوان)
 export const createVisitRequest = async (req, res) => {
@@ -41,6 +153,7 @@ export const createVisitRequest = async (req, res) => {
     const scheduledDate = data.scheduledDate; // YYYY-MM-DD
     const scheduledTime = data.scheduledTime || "";
     const area = data.area != null ? parseFloat(data.area) : null;
+    const region = (data.region || "").trim() || null;
     const address = (data.address || "").trim();
     const notes = (data.notes || "").trim() || null;
 
@@ -55,23 +168,27 @@ export const createVisitRequest = async (req, res) => {
       return json(res, 400, { error: "Invalid scheduledDate format (use YYYY-MM-DD)" });
     }
 
+    const id = crypto.randomUUID();
     await prisma.$executeRawUnsafe(
-      `INSERT INTO visit_request (clientUserId, painterId, scheduledDate, scheduledTime, area, address, status, notes)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      `INSERT INTO visit_request (id, clientUserId, painterId, scheduledDate, scheduledTime, area, region, address, status, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      id,
       user.id,
       painterId,
       dateObj,
       scheduledTime,
       area,
+      region,
       address,
       notes
     );
 
     const [inserted] = await prisma.$queryRawUnsafe(
-      "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, address, status, createdAt, notes FROM visit_request WHERE clientUserId = ? ORDER BY id DESC LIMIT 1",
-      user.id
+      "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, region, address, status, createdAt, notes FROM visit_request WHERE id = ? LIMIT 1",
+      id
     );
-    json(res, 201, inserted ? rowToVisitRequest(inserted) : { ok: true });
+    const enriched = inserted ? (await attachClientContact([inserted]))[0] : null;
+    json(res, 201, enriched ? rowToVisitRequest(enriched) : { ok: true });
   } catch (err) {
     if (err.message === "No token provided" || err.message?.includes("token")) {
       return json(res, 401, { error: err.message });
@@ -101,12 +218,12 @@ export const getVisitRequests = async (req, res, query = {}) => {
       }
       if (user.role === "admin" && query.painterId) {
         raw = await prisma.$queryRawUnsafe(
-          "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, address, status, createdAt, notes FROM visit_request WHERE painterId = ? ORDER BY createdAt DESC",
+          "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, region, address, status, createdAt, notes FROM visit_request WHERE painterId = ? ORDER BY createdAt DESC",
           safeId(query.painterId)
         );
       } else if (painterId) {
         raw = await prisma.$queryRawUnsafe(
-          "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, address, status, createdAt, notes FROM visit_request WHERE painterId = ? ORDER BY createdAt DESC",
+          "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, region, address, status, createdAt, notes FROM visit_request WHERE painterId = ? ORDER BY createdAt DESC",
           painterId
         );
       } else {
@@ -116,17 +233,18 @@ export const getVisitRequests = async (req, res, query = {}) => {
       // طلباتي كعميل (أو كل الطلبات للمدير)
       if (user.role === "admin" && !mine) {
         raw = await prisma.$queryRawUnsafe(
-          "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, address, status, createdAt, notes FROM visit_request ORDER BY createdAt DESC"
+          "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, region, address, status, createdAt, notes FROM visit_request ORDER BY createdAt DESC"
         );
       } else {
         raw = await prisma.$queryRawUnsafe(
-          "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, address, status, createdAt, notes FROM visit_request WHERE clientUserId = ? ORDER BY createdAt DESC",
+          "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, region, address, status, createdAt, notes FROM visit_request WHERE clientUserId = ? ORDER BY createdAt DESC",
           user.id
         );
       }
     }
 
-    const list = (Array.isArray(raw) ? raw : []).map(rowToVisitRequest);
+    const withClient = await attachClientContact(raw);
+    const list = withClient.map(rowToVisitRequest);
     json(res, 200, list);
   } catch (err) {
     if (err.message === "No token provided" || err.message?.includes("token")) {
@@ -145,7 +263,7 @@ export const getVisitRequestById = async (req, res, id) => {
     if (!reqId) return json(res, 400, { error: "Invalid id" });
 
     const raw = await prisma.$queryRawUnsafe(
-      "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, address, status, createdAt, notes FROM visit_request WHERE id = ? LIMIT 1",
+      "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, region, address, status, createdAt, notes FROM visit_request WHERE id = ? LIMIT 1",
       reqId
     );
     const row = Array.isArray(raw) ? raw[0] : raw;
@@ -159,7 +277,8 @@ export const getVisitRequestById = async (req, res, id) => {
       (painter && painter.userId === user.id);
     if (!canAccess) return json(res, 403, { error: "Access denied" });
 
-    json(res, 200, rowToVisitRequest(row));
+    const enriched = (await attachClientContact([row]))[0];
+    json(res, 200, rowToVisitRequest(enriched));
   } catch (err) {
     if (err.message === "No token provided" || err.message?.includes("token")) {
       return json(res, 401, { error: err.message });
@@ -202,11 +321,12 @@ export const updateVisitRequestStatus = async (req, res, id) => {
     );
 
     const updated = await prisma.$queryRawUnsafe(
-      "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, address, status, createdAt, notes FROM visit_request WHERE id = ? LIMIT 1",
+      "SELECT id, clientUserId, painterId, scheduledDate, scheduledTime, area, region, address, status, createdAt, notes FROM visit_request WHERE id = ? LIMIT 1",
       reqId
     );
     const out = Array.isArray(updated) ? updated[0] : updated;
-    json(res, 200, out ? rowToVisitRequest(out) : { id: reqId, status });
+    const enriched = out ? (await attachClientContact([out]))[0] : null;
+    json(res, 200, enriched ? rowToVisitRequest(enriched) : { id: reqId, status });
   } catch (err) {
     if (err.message === "No token provided" || err.message?.includes("token")) {
       return json(res, 401, { error: err.message });

@@ -14,13 +14,14 @@ const readBody = (req) =>
   });
 
 const safeId = (id) => {
-  const n = parseInt(id, 10);
-  return Number.isFinite(n) ? n : null;
+  const s = id != null ? String(id).trim() : "";
+  return s.length > 0 ? s : null;
 };
 
 const rowToDesign = (row) => ({
   id: row.id,
   designerId: row.designerId,
+  designerName: row.designerName ?? null,
   title: row.title,
   description: row.description,
   imageUrl: row.imageUrl,
@@ -29,19 +30,105 @@ const rowToDesign = (row) => ({
   updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
 });
 
-// GET /designs — list all (optional ?designerId=) — raw SQL لتجنب أخطاء Prisma
+/**
+ * @swagger
+ * /designs:
+ *   get:
+ *     tags: [Designs]
+ *     summary: عرض التصاميم
+ *     description: يدعم الفلترة بـ `designerId` أو `designerName`.
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: designerId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: designerName
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: قائمة التصاميم
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Design'
+ *   post:
+ *     tags: [Designs]
+ *     summary: إضافة تصميم (مصمم/أدمن)
+ *     description: المصمم أو الأدمن فقط يمكنه إضافة تصميم.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/DesignCreateBody'
+ *     responses:
+ *       201:
+ *         description: تم إضافة التصميم
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Design'
+ *       400:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ *       403:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ */
+// GET /designs — list all (optional ?designerId= & ?designerName=) — raw SQL لتجنب أخطاء Prisma
 export const getDesigns = async (req, res, query = {}) => {
   try {
     const designerId = query.designerId ? safeId(query.designerId) : undefined;
+    const designerName =
+      query.designerName != null && String(query.designerName).trim()
+        ? `%${String(query.designerName).trim()}%`
+        : undefined;
     let raw;
-    if (designerId) {
+    if (designerId && designerName) {
       raw = await prisma.$queryRawUnsafe(
-        "SELECT id, designerId, title, description, imageUrl, videoUrl, createdAt, updatedAt FROM design WHERE designerId = ? ORDER BY createdAt DESC",
+        `SELECT d.id, d.designerId, d.title, d.description, d.imageUrl, d.videoUrl, d.createdAt, d.updatedAt, u.name AS designerName
+         FROM design d
+         LEFT JOIN \`user\` u ON u.id = d.designerId
+         WHERE d.designerId = ? AND u.name LIKE ?
+         ORDER BY d.createdAt DESC`,
+        designerId,
+        designerName
+      );
+    } else if (designerId) {
+      raw = await prisma.$queryRawUnsafe(
+        `SELECT d.id, d.designerId, d.title, d.description, d.imageUrl, d.videoUrl, d.createdAt, d.updatedAt, u.name AS designerName
+         FROM design d
+         LEFT JOIN \`user\` u ON u.id = d.designerId
+         WHERE d.designerId = ?
+         ORDER BY d.createdAt DESC`,
         designerId
+      );
+    } else if (designerName) {
+      raw = await prisma.$queryRawUnsafe(
+        `SELECT d.id, d.designerId, d.title, d.description, d.imageUrl, d.videoUrl, d.createdAt, d.updatedAt, u.name AS designerName
+         FROM design d
+         LEFT JOIN \`user\` u ON u.id = d.designerId
+         WHERE u.name LIKE ?
+         ORDER BY d.createdAt DESC`,
+        designerName
       );
     } else {
       raw = await prisma.$queryRawUnsafe(
-        "SELECT id, designerId, title, description, imageUrl, videoUrl, createdAt, updatedAt FROM design ORDER BY createdAt DESC"
+        `SELECT d.id, d.designerId, d.title, d.description, d.imageUrl, d.videoUrl, d.createdAt, d.updatedAt, u.name AS designerName
+         FROM design d
+         LEFT JOIN \`user\` u ON u.id = d.designerId
+         ORDER BY d.createdAt DESC`
       );
     }
     const designs = (Array.isArray(raw) ? raw : []).map(rowToDesign);
@@ -52,6 +139,76 @@ export const getDesigns = async (req, res, query = {}) => {
   }
 };
 
+/**
+ * @swagger
+ * /designs/{id}:
+ *   get:
+ *     tags: [Designs]
+ *     summary: تفاصيل تصميم
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: بيانات التصميم
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Design'
+ *       404:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ *   put:
+ *     tags: [Designs]
+ *     summary: تعديل تصميم (صاحب التصميم/أدمن)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/DesignUpdateBody'
+ *     responses:
+ *       200:
+ *         description: تم التعديل
+ *       403:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ *   delete:
+ *     tags: [Designs]
+ *     summary: حذف تصميم (صاحب التصميم/أدمن)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: تم الحذف
+ *       403:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ */
 // GET /designs/:id — raw SQL
 export const getDesignById = async (req, res, id) => {
   try {
@@ -157,6 +314,48 @@ export const deleteDesign = async (req, res, id) => {
   }
 };
 
+/**
+ * @swagger
+ * /designs/{id}/comments:
+ *   get:
+ *     tags: [Designs]
+ *     summary: عرض تعليقات التصميم
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: قائمة التعليقات
+ *   post:
+ *     tags: [Designs]
+ *     summary: تعليق على التصميم (مستخدم مسجّل)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/DesignCommentBody'
+ *     responses:
+ *       201:
+ *         description: تم إضافة التعليق
+ *       403:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ */
 // GET /designs/:id/comments
 export const getDesignComments = async (req, res, id) => {
   try {
@@ -198,6 +397,34 @@ export const addDesignComment = async (req, res, id) => {
   }
 };
 
+/**
+ * @swagger
+ * /designs/{id}/comments/{commentId}:
+ *   delete:
+ *     tags: [Designs]
+ *     summary: حذف تعليق (صاحب التعليق/أدمن)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: commentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: تم حذف التعليق
+ *       403:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ */
 // DELETE /designs/:id/comments/:commentId — comment owner or admin
 export const deleteDesignComment = async (req, res, designId, commentId) => {
   try {
@@ -222,6 +449,51 @@ export const deleteDesignComment = async (req, res, designId, commentId) => {
   }
 };
 
+/**
+ * @swagger
+ * /designs/{id}/favorite:
+ *   get:
+ *     tags: [Designs]
+ *     summary: حالة الإعجاب للتصميم الحالي
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: حالة الإعجاب
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/FavoriteToggleResponse'
+ *   post:
+ *     tags: [Designs]
+ *     summary: إضافة/إزالة إعجاب (toggle)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: حالة الإعجاب بعد التنفيذ
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/FavoriteToggleResponse'
+ *       403:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ */
 // POST /designs/:id/favorite — toggle; any logged-in user
 export const toggleDesignFavorite = async (req, res, id) => {
   try {
@@ -251,6 +523,123 @@ export const toggleDesignFavorite = async (req, res, id) => {
   }
 };
 
+/**
+ * @swagger
+ * /designs/{id}/requests:
+ *   get:
+ *     tags: [Designs]
+ *     summary: عرض طلبات التصميم (للمصمم / الأدمن)
+ *     description: "المصمم يعرض طلبات كل تصميم يملكه عبر هذا المسار لكل designId (بعد جلب تصاميمه بـ GET /designs?designerId=...). الأدمن يراها لأي تصميم. الاستجابة تتضمن clientName و clientPhone. لتحديث الحالة استخدم PUT /designs/{designId}/requests/{requestId}/status."
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: قائمة الطلبات (الأحدث أولاً)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/DesignRequest'
+ *       403:
+ *         description: ليس صاحب التصميم وليس أدمن
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ *       404:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ *   post:
+ *     tags: [Designs]
+ *     summary: طلب مصمم على هذا التصميم
+ *     description: "أي مستخدم مسجل (مثل user، painter، vendor، designer، admin). يُحدد العميل من التوكن؛ الحقل description إلزامي."
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/DesignRequestBody'
+ *           example:
+ *             description: "طلب تنفيذ التصميم مع تفاصيل الغرفة والألوان المفضلة."
+ *             imageUrl: null
+ *             videoUrl: null
+ *     responses:
+ *       201:
+ *         description: تم إنشاء الطلب (بدون تضمين clientName/clientPhone في نفس الاستجابة)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/DesignRequest'
+ *       400:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ *       403:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ *       404:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ * /api/designs/{id}/requests:
+ *   get:
+ *     tags: [Designs]
+ *     summary: عرض طلبات التصميم (بادئة /api)
+ *     description: نفس GET `/designs/{id}/requests`.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: قائمة الطلبات
+ *   post:
+ *     tags: [Designs]
+ *     summary: إنشاء طلب تصميم (بادئة /api)
+ *     description: نفس POST `/designs/{id}/requests`.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/DesignRequestBody'
+ *     responses:
+ *       201:
+ *         description: تم إنشاء الطلب
+ */
 // GET /designs/:id/requests — design owner or admin
 export const getDesignRequests = async (req, res, id) => {
   try {
@@ -266,7 +655,21 @@ export const getDesignRequests = async (req, res, id) => {
       where: { designId },
       orderBy: { createdAt: "desc" },
     });
-    json(res, 200, requests);
+    const clientIds = [...new Set(requests.map((r) => r.clientUserId).filter(Boolean))];
+    const clients =
+      clientIds.length > 0
+        ? await prisma.user.findMany({
+            where: { id: { in: clientIds } },
+            select: { id: true, name: true, phone: true },
+          })
+        : [];
+    const clientMap = Object.fromEntries(clients.map((c) => [c.id, c]));
+    const withClient = requests.map((r) => ({
+      ...r,
+      clientName: clientMap[r.clientUserId]?.name || null,
+      clientPhone: clientMap[r.clientUserId]?.phone || null,
+    }));
+    json(res, 200, withClient);
   } catch (err) {
     if (err.message === "Access denied" || err.message?.includes("token")) {
       return json(res, 403, { error: err.message });
@@ -303,6 +706,189 @@ export const createDesignRequest = async (req, res, id) => {
       return json(res, 403, { error: err.message });
     }
     json(res, 500, { error: err.message });
+  }
+};
+
+/**
+ * @swagger
+ * /designs/{designId}/requests/{requestId}/status:
+ *   put:
+ *     tags: [Designs]
+ *     summary: تحديث حالة طلب التصميم
+ *     description: "صاحب التصميم (المصمم) أو الأدمن. استخدم نفس designId المنبثق من قائمة التصاميم أو من GET /designs/{designId}/requests."
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: designId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/DesignRequestStatusBody'
+ *           examples:
+ *             accepted:
+ *               summary: قبول الطلب
+ *               value:
+ *                 status: accepted
+ *             completed:
+ *               summary: إتمام الطلب
+ *               value:
+ *                 status: completed
+ *     responses:
+ *       200:
+ *         description: الطلب بعد التحديث (يتضمن clientName و clientPhone عند النجاح)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/DesignRequest'
+ *       400:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ *       403:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ *       404:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ * /api/designs/{designId}/requests/{requestId}/status:
+ *   put:
+ *     tags: [Designs]
+ *     summary: تحديث حالة طلب التصميم (بادئة /api)
+ *     description: نفس PUT `/designs/{designId}/requests/{requestId}/status`.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: designId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/DesignRequestStatusBody'
+ *     responses:
+ *       200:
+ *         description: الطلب بعد التحديث
+ */
+// PUT /designs/:designId/requests/:requestId/status — مصمم صاحب التصميم أو أدمن
+export const updateDesignRequestStatus = async (req, res, designIdParam, requestIdParam) => {
+  try {
+    const user = authorize(req, ["admin", "designer"]);
+    const designId = safeId(designIdParam);
+    const requestId = safeId(requestIdParam);
+    if (!designId || !requestId) return json(res, 400, { error: "Invalid id" });
+
+    const design = await prisma.design.findUnique({ where: { id: designId } });
+    if (!design) return json(res, 404, { error: "Design not found" });
+    if (user.role !== "admin" && design.designerId !== user.id) {
+      return json(res, 403, { error: "Access denied" });
+    }
+
+    const existing = await prisma.designrequest.findFirst({
+      where: { id: requestId, designId },
+    });
+    if (!existing) return json(res, 404, { error: "Design request not found" });
+
+    const body = await readBody(req);
+    const data = JSON.parse(body || "{}");
+    const status = (data.status || "").trim().toLowerCase();
+    if (!["pending", "accepted", "rejected", "completed"].includes(status)) {
+      return json(res, 400, {
+        error: "status must be one of: pending, accepted, rejected, completed",
+      });
+    }
+
+    const updated = await prisma.designrequest.update({
+      where: { id: requestId },
+      data: { status },
+    });
+
+    const clients =
+      updated.clientUserId != null
+        ? await prisma.user.findMany({
+            where: { id: updated.clientUserId },
+            select: { id: true, name: true, phone: true },
+          })
+        : [];
+    const c = clients[0];
+    const out = {
+      ...updated,
+      clientName: c?.name ?? null,
+      clientPhone: c?.phone ?? null,
+    };
+    json(res, 200, out);
+  } catch (err) {
+    if (err.message === "Access denied" || err.message?.includes("token")) {
+      return json(res, 403, { error: err.message });
+    }
+    json(res, 500, { error: err.message });
+  }
+};
+
+/**
+ * @swagger
+ * /designs/{id}/share:
+ *   get:
+ *     tags: [Designs]
+ *     summary: رابط مشاركة التصميم
+ *     description: يعيد رابط مشاركة جاهز للواجهة.
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: رابط المشاركة
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/DesignShareResponse'
+ *       404:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ */
+export const getDesignShareLink = async (req, res, id) => {
+  try {
+    const designId = safeId(id);
+    if (!designId) return json(res, 400, { error: "Invalid design id" });
+    const design = await prisma.design.findUnique({ where: { id: designId } });
+    if (!design) return json(res, 404, { error: "Design not found" });
+    const frontendBase = process.env.FRONTEND_URL || "http://localhost:5173";
+    const shareUrl = `${frontendBase.replace(/\/+$/, "")}/designs/${designId}`;
+    return json(res, 200, { designId, shareUrl });
+  } catch (err) {
+    return json(res, 500, { error: err.message || "Internal server error" });
   }
 };
 

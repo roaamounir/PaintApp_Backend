@@ -11,7 +11,7 @@ export const createSelection = async (req, res) => {
     try {
       const { userId, paintId, area, length, width, height, colorCode, imagePath } = JSON.parse(body);
 
-      const paint = await prisma.paint.findUnique({ where: { id: Number(paintId) } });
+      const paint = await prisma.paint.findUnique({ where: { id: paintId } });
       if (!paint) {
         res.writeHead(404, { "Content-Type": "application/json" });
         return res.end(JSON.stringify({ error: "Paint not found" }));
@@ -52,7 +52,7 @@ export const updateSelection = async (req, res, id) => {
     try {
       const { area, length, width, height, colorCode, imagePath } = JSON.parse(body);
 
-      const selectionDb = await prisma.selection.findUnique({ where: { id: Number(id) } });
+      const selectionDb = await prisma.selection.findUnique({ where: { id: id } });
       if (!selectionDb) {
         res.writeHead(404, { "Content-Type": "application/json" });
         return res.end(JSON.stringify({ error: "Selection not found" }));
@@ -62,7 +62,7 @@ export const updateSelection = async (req, res, id) => {
       const recommendedQuantity = calculateRecommendedQuantity({ area, length, width, height }, paint);
 
       const updatedSelection = await prisma.selection.update({
-        where: { id: Number(id) },
+        where: { id: id },
         data: { area, length, width, height, recommendedQuantity, colorCode, imagePath },
       });
 
@@ -78,7 +78,7 @@ export const updateSelection = async (req, res, id) => {
 // ===== Delete Selection =====
 export const deleteSelection = async (req, res, id) => {
   try {
-    await prisma.selection.delete({ where: { id: Number(id) } });
+    await prisma.selection.delete({ where: { id: id } });
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ message: "Selection deleted" }));
   } catch (err) {

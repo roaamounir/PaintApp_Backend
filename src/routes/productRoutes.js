@@ -7,7 +7,7 @@ export const productRoutes = async (req, res) => {
 
   if (url === "/paint" && method === "POST") {
     try {
-      authorize(req, ["admin", "vendor"]);
+      authorize(req, ["admin"]);
       await createPaint(req, res);
     } catch (err) {
       res.writeHead(403, { "Content-Type": "application/json" });

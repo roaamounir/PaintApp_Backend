@@ -7,7 +7,12 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node seed.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "db:fresh": "node scripts/fresh-start.js",
+    "test": "node scripts/test-wholesale-retail.mjs",
+    "test:wholesale-flow": "node scripts/test-wholesale-approval-flow.mjs",
+    "test:offer-flow": "node scripts/test-offer-checkout-flow.mjs",
+    "test:coupon-flow": "node scripts/test-coupon-checkout-flow.mjs",
+    "test:audit-login": "node scripts/test-audit-login.mjs"
   },
   "keywords": [],
   "author": "",
@@ -27,6 +32,8 @@
     "multer": "^2.0.2",
     "mysql2": "^3.16.2",
     "prisma": "^4.16.2",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-dist": "^5.32.1",
     "xlsx": "^0.18.5"
   }
 }
